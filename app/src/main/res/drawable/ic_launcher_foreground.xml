@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Frosted glass interior fading smoothly toward the right portal opening -->
+    <path android:pathData="M42,31 L56,31 A8,8 0 0,1 64,39 L64,69 A8,8 0 0,1 56,77 L42,77 A8,8 0 0,1 34,69 L34,39 A8,8 0 0,1 42,31 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="34"
+                android:startY="54"
+                android:endX="64"
+                android:endY="54"
+                android:type="linear">
+                <item android:color="#28FFFFFF" android:offset="0.0" />
+                <item android:color="#0CFFFFFF" android:offset="0.65" />
+                <item android:color="#00FFFFFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Open-sided iOS device frame -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M64,45.2 L64,39 A8,8 0 0,0 56,31 L42,31 A8,8 0 0,0 34,39 L34,69 A8,8 0 0,0 42,77 L56,77 A8,8 0 0,0 64,69 L64,63.8"
+        android:strokeWidth="4.0"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Dynamic Island top capsule -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M45.8,36.8 L52.2,36.8"
+        android:strokeWidth="2.8"
+        android:strokeColor="#DCFFFFFF"
+        android:strokeLineCap="round" />
+
+    <!-- Golden bridge arrow shaft entering the iOS portal -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M75.5,54.5 L46.8,54.5"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="75.5"
+                android:startY="54.5"
+                android:endX="46"
+                android:endY="54.5"
+                android:type="linear">
+                <item android:color="#F5A623" android:offset="0.0" />
+                <item android:color="#FFD97D" android:offset="0.55" />
+                <item android:color="#FFF5CC" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Golden bridge arrow chevron head -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54.5,46.8 L46.2,54.5 L54.5,62.2"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="55"
+                android:startY="46.8"
+                android:endX="46.2"
+                android:endY="62.2"
+                android:type="linear">
+                <item android:color="#FFF5CC" android:offset="0.0" />
+                <item android:color="#FFD166" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

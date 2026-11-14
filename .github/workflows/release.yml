@@ -1,0 +1,81 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+
+      - name: Prepare version and optional signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          VERSION_NAME="${TAG_NAME#v}"
+          echo "APP_VERSION_NAME=${VERSION_NAME}" >> "${GITHUB_ENV}"
+          echo "APP_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "${GITHUB_ENV}"
+
+          if [ -n "${SIGNING_KEYSTORE_BASE64}" ]; then
+            KEYSTORE_PATH="${RUNNER_TEMP}/release-keystore.jks"
+            printf '%s' "${SIGNING_KEYSTORE_BASE64}" | tr -d ' \n\r\t' | base64 -d > "${KEYSTORE_PATH}"
+            echo "RELEASE_STORE_FILE=${KEYSTORE_PATH}" >> "${GITHUB_ENV}"
+            echo "RELEASE_STORE_PASSWORD=${SIGNING_STORE_PASSWORD}" >> "${GITHUB_ENV}"
+            echo "RELEASE_KEY_ALIAS=${SIGNING_KEY_ALIAS}" >> "${GITHUB_ENV}"
+            echo "RELEASE_KEY_PASSWORD=${SIGNING_KEY_PASSWORD}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Collect APK and generate SHA-256 checksum
+        run: |
+          mkdir -p dist
+          APK_FILE=$(find app/build/outputs/apk/release -maxdepth 2 -name "*.apk" | head -n 1)
+          if [ -z "${APK_FILE}" ]; then
+            echo "No APK found under app/build/outputs/apk/release" >&2
+            exit 1
+          fi
+          OUT_NAME="netease-ios-${GITHUB_REF_NAME}.apk"
+          cp "${APK_FILE}" "dist/${OUT_NAME}"
+          (cd dist && sha256sum "${OUT_NAME}" > "${OUT_NAME}.sha256")
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/release-keystore.jks"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/netease-ios-${{ github.ref_name }}.apk
+            dist/netease-ios-${{ github.ref_name }}.apk.sha256
