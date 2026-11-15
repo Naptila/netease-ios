@@ -15,7 +15,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,7 +43,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -88,7 +86,6 @@ import me.naptila.neteaseios.ui.theme.StatusWarningContainerDark
 import me.naptila.neteaseios.ui.theme.StatusWarningContainerLight
 import me.naptila.neteaseios.ui.theme.StatusWarningDark
 import me.naptila.neteaseios.ui.theme.StatusWarningLight
-import java.util.Locale
 
 enum class StatusTone {
     Neutral,
@@ -102,16 +99,14 @@ data class BridgeUiState(
     val installedApps: List<InstalledGame> = emptyList(),
     val loadingApps: Boolean = false,
     val detectedGameId: String? = null,
-    val identityRemainingSec: Int = 0,
     val busy: Boolean = false,
-    val statusMessage: String = "请先在上方选择目标网易游戏。",
+    val statusMessage: String = "请先选择目标网易游戏。",
     val statusTone: StatusTone = StatusTone.Neutral,
     val submittedCurrent: Boolean = false,
     val unconfirmedCurrent: Boolean = false,
     val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
     val safAuthorized: Boolean = false
 ) {
-    val identityFresh: Boolean get() = identityRemainingSec > 0
     val effectiveGameId: String? get() = currentGame?.spec?.gameId ?: detectedGameId
     val gameDisplayName: String get() = currentGame?.spec?.displayName ?: "目标游戏"
 }
@@ -122,8 +117,6 @@ fun BridgeScreen(
     onOpenGame: () -> Unit,
     onSelectInstalledGame: (InstalledGame) -> Unit,
     onRefreshApps: () -> Unit,
-    onIdentifyAccount: () -> Unit,
-    onOpenSwitchWindow: () -> Unit,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
@@ -180,29 +173,9 @@ fun BridgeScreen(
                     dark = dark
                 )
 
-                StepOneIdentifyCard(
-                    gameName = state.gameDisplayName,
-                    hasGame = state.currentGame != null,
-                    identityFresh = state.identityFresh,
-                    remainingSec = state.identityRemainingSec,
-                    busy = state.busy,
-                    dark = dark,
-                    onIdentify = {
-                        if (state.currentGame == null) showAppPicker = true else onIdentifyAccount()
-                    }
-                )
-
-                StepTwoSwitchWindowCard(
-                    gameName = state.gameDisplayName,
-                    highlighted = state.identityFresh && !state.submittedCurrent && !state.unconfirmedCurrent,
-                    busy = state.busy,
-                    onOpenSwitchWindow = {
-                        if (state.currentGame == null) showAppPicker = true else onOpenSwitchWindow()
-                    }
-                )
-
-                StepThreePrepareIosCard(
+                PrepareIosCard(
                     state = state,
+                    dark = dark,
                     onSelectTransportMode = onSelectTransportMode,
                     onAuthorizeSafDirectory = {
                         if (state.currentGame == null) showAppPicker = true else onAuthorizeSafDirectory()
@@ -392,7 +365,7 @@ private fun HeroHeaderCard(
                                 color = scheme.primary
                             )
                             Text(
-                                text = "从本机已安装的应用列表中选择",
+                                text = "从本机已安装应用中选择",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant
                             )
@@ -425,22 +398,24 @@ private fun HeroHeaderCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     StatusPill(
-                        text = if (selected.installed) "应用已安装" else "应用已卸载",
+                        text = if (selected.installed) "已安装" else "已卸载",
                         tone = if (selected.installed) StatusTone.Success else StatusTone.Error,
                         dark = dark,
                         modifier = Modifier.weight(1f)
                     )
 
-                    val identityLabel = if (state.identityFresh) {
-                        val mins = state.identityRemainingSec / 60
-                        val secs = state.identityRemainingSec % 60
-                        String.format(Locale.ROOT, "账号已识别 · %02d:%02d", mins, secs)
-                    } else {
-                        "尚未识别账号"
+                    val (modeLabel, modeTone) = when {
+                        state.submittedCurrent -> "已准备就绪" to StatusTone.Success
+                        state.unconfirmedCurrent -> "已发送 · 待核对" to StatusTone.Warning
+                        state.transportMode == SeedTransportMode.SAF_MEDIA -> {
+                            if (state.safAuthorized) "目录已授权" to StatusTone.Success
+                            else "目录待授权" to StatusTone.Warning
+                        }
+                        else -> "标准缓存" to StatusTone.Neutral
                     }
                     StatusPill(
-                        text = identityLabel,
-                        tone = if (state.identityFresh) StatusTone.Success else StatusTone.Neutral,
+                        text = modeLabel,
+                        tone = modeTone,
                         dark = dark,
                         modifier = Modifier.weight(1f)
                     )
@@ -459,7 +434,7 @@ private fun HeroHeaderCard(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "打开",
+                            text = "打开游戏",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -561,7 +536,7 @@ private fun InstalledAppPickerDialog(
                             color = scheme.onSurface
                         )
                         Text(
-                            text = "请选择要登录 iOS 角色的网易游戏",
+                            text = "选择要登录 iOS 角色的网易游戏",
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant
                         )
@@ -800,318 +775,32 @@ private fun StatusFeedbackBanner(
 }
 
 @Composable
-private fun StepOneIdentifyCard(
-    gameName: String,
-    hasGame: Boolean,
-    identityFresh: Boolean,
-    remainingSec: Int,
-    busy: Boolean,
-    dark: Boolean,
-    onIdentify: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    val activeHighlight = hasGame && !identityFresh
-
-    StepCardContainer(
-        stepNumber = 1,
-        completed = identityFresh,
-        highlighted = activeHighlight,
-        title = "识别游戏当前账号",
-        subtitle = if (identityFresh) {
-            val mins = remainingSec / 60
-            val secs = remainingSec % 60
-            String.format(Locale.ROOT, "账号标识有效期内（剩余 %02d:%02d）", mins, secs)
-        } else {
-            "先在「$gameName」正常登录要切到 iOS 的网易账号"
-        },
-        dark = dark
-    ) {
-        Text(
-            text = "首次使用或更换账号时，请先在「$gameName」正常登录该网易账号，然后点击下方按钮读取账号标识与游戏代号。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurfaceVariant
-        )
-
-        if (!identityFresh) {
-            Button(
-                onClick = onIdentify,
-                enabled = !busy,
-                shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(vertical = 13.dp, horizontal = 18.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = AppIcons.UserScan,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (hasGame) "识别当前账号" else "先选择目标游戏",
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        } else {
-            FilledTonalButton(
-                onClick = onIdentify,
-                enabled = !busy,
-                shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(vertical = 12.dp, horizontal = 18.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = AppIcons.UserScan,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "重新识别当前账号",
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepTwoSwitchWindowCard(
-    gameName: String,
-    highlighted: Boolean,
-    busy: Boolean,
-    onOpenSwitchWindow: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
-
-    StepCardContainer(
-        stepNumber = 2,
-        completed = false,
-        highlighted = highlighted,
-        title = "在游戏内打开「切换账号」",
-        subtitle = "停留在网易登录小窗后切回助手",
-        dark = dark
-    ) {
-        Text(
-            text = "识别账号后，进入「$gameName」点击用户中心或设置中的「切换账号」，停留在网易登录窗口界面，再返回本助手准备 iOS 登录。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurfaceVariant
-        )
-
-        OutlinedButton(
-            onClick = onOpenSwitchWindow,
-            enabled = !busy,
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, if (highlighted) scheme.primary else scheme.outline),
-            contentPadding = PaddingValues(vertical = 12.dp, horizontal = 18.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                imageVector = AppIcons.SwitchAccount,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "去游戏点「切换账号」",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-    }
-}
-
-@Composable
-private fun StepThreePrepareIosCard(
+private fun PrepareIosCard(
     state: BridgeUiState,
+    dark: Boolean,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isSystemInDarkTheme()
+    val hasGame = state.currentGame != null
+    val warnBg = if (dark) StatusWarningContainerDark else StatusWarningContainerLight
+    val warnFg = if (dark) StatusWarningDark else StatusWarningLight
 
-    StepCardContainer(
-        stepNumber = 3,
-        completed = state.submittedCurrent,
-        highlighted = state.identityFresh,
-        title = "注入 iOS 登录准备",
-        subtitle = "已停留在游戏登录窗口后执行",
-        dark = dark
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "准备文件写入方式",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.onSurfaceVariant
-            )
-
-            TransportModeOptionItem(
-                title = "标准缓存方式（默认）",
-                description = "适用于光·遇等开放缓存接口的游戏，免目录授权",
-                selected = state.transportMode == SeedTransportMode.STANDARD,
-                enabled = !state.busy,
-                onClick = { onSelectTransportMode(SeedTransportMode.STANDARD) }
-            )
-
-            TransportModeOptionItem(
-                title = "共享目录方式（SAF · 阴阳师适用）",
-                description = "经系统授权写入 Android/media 临时文件，适配无缓存接口的游戏",
-                selected = state.transportMode == SeedTransportMode.SAF_MEDIA,
-                enabled = !state.busy,
-                onClick = { onSelectTransportMode(SeedTransportMode.SAF_MEDIA) }
-            )
-
-            if (state.transportMode == SeedTransportMode.SAF_MEDIA) {
-                val authToneFg = if (state.safAuthorized) {
-                    if (dark) StatusSuccessDark else StatusSuccessLight
-                } else {
-                    scheme.onSurfaceVariant
-                }
-                Surface(
-                    shape = RoundedCornerShape(13.dp),
-                    color = scheme.surfaceVariant.copy(alpha = if (dark) 0.5f else 0.65f),
-                    border = BorderStroke(1.dp, scheme.outlineVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = AppIcons.Folder,
-                            contentDescription = null,
-                            tint = authToneFg,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = if (state.safAuthorized) {
-                                "已授权 Android/media 共享目录"
-                            } else {
-                                "待授权内部存储 Android/media 目录"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = authToneFg,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            onClick = onAuthorizeSafDirectory,
-                            enabled = !state.busy,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = if (state.safAuthorized) "更换目录" else "授权目录",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Button(
-            onClick = onPrepareIosLogin,
-            enabled = !state.busy,
-            shape = RoundedCornerShape(15.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (state.identityFresh) scheme.primary else scheme.secondary
-            ),
-            contentPadding = PaddingValues(vertical = 15.dp, horizontal = 20.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "已停在登录窗口，准备 iOS 登录",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
-        val warnBg = if (dark) StatusWarningContainerDark else StatusWarningContainerLight
-        val warnFg = if (dark) StatusWarningDark else StatusWarningLight
-
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = warnBg,
-            border = BorderStroke(1.2.dp, warnFg.copy(alpha = 0.45f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(13.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    imageVector = AppIcons.Alert,
-                    contentDescription = null,
-                    tint = warnFg,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .size(19.dp)
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "重要：返回游戏后请先点右上角「×」关闭旧窗口！",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = warnFg
-                    )
-                    Text(
-                        text = "切勿直接点击旧列表里的原账号，否则因旧会话已失效会导致一直转圈卡死！必须先点切换账号列表右上角的「×」关掉弹窗，重新打开以刷新账号列表，再重新登录即可进入 iOS 角色。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = warnFg.copy(alpha = 0.92f)
-                    )
-                }
-            }
-        }
-
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = scheme.surfaceVariant.copy(alpha = if (dark) 0.5f else 0.65f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "• 以后切号时如果原本的 iOS 号不小心进成了安卓号，不用重开本助手，直接在游戏「切换账号」里把这个号再点选登录一次就会变回 iOS 号。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant
-                )
-                Text(
-                    text = "• 如果想主动切回安卓角色，在游戏「切换账号」列表里删掉该账号记录后重新登录即可。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepCardContainer(
-    stepNumber: Int,
-    completed: Boolean,
-    highlighted: Boolean,
-    title: String,
-    subtitle: String,
-    dark: Boolean,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
     val borderColor by animateColorAsState(
         targetValue = when {
-            highlighted -> scheme.primary.copy(alpha = 0.55f)
-            completed -> (if (dark) StatusSuccessDark else StatusSuccessLight).copy(alpha = 0.4f)
+            state.submittedCurrent -> (if (dark) StatusSuccessDark else StatusSuccessLight).copy(alpha = 0.45f)
+            hasGame -> scheme.primary.copy(alpha = 0.5f)
             else -> scheme.outlineVariant
         },
         animationSpec = tween(220),
-        label = "stepBorder"
+        label = "cardBorder"
     )
 
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        border = BorderStroke(if (highlighted) 1.4.dp else 1.dp, borderColor),
+        border = BorderStroke(if (hasGame) 1.3.dp else 1.dp, borderColor),
         elevation = CardDefaults.cardElevation(defaultElevation = if (dark) 0.dp else 1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1121,60 +810,149 @@ private fun StepCardContainer(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val badgeBg = when {
-                    completed -> if (dark) StatusSuccessContainerDark else StatusSuccessContainerLight
-                    highlighted -> scheme.primary
-                    else -> scheme.surfaceVariant
-                }
-                val badgeFg = when {
-                    completed -> if (dark) StatusSuccessDark else StatusSuccessLight
-                    highlighted -> scheme.onPrimary
-                    else -> scheme.onSurfaceVariant
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "准备 iOS 登录",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = scheme.onSurface
+                )
+                Text(
+                    text = "先在游戏主页登好账号 → 点下方准备 → 回游戏「切换账号」重登",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
 
-                Surface(
-                    shape = CircleShape,
-                    color = badgeBg,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (completed) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TransportModeOptionItem(
+                    title = "标准缓存（默认）",
+                    description = "适用于光·遇等大多数官服游戏",
+                    selected = state.transportMode == SeedTransportMode.STANDARD,
+                    enabled = !state.busy,
+                    onClick = { onSelectTransportMode(SeedTransportMode.STANDARD) }
+                )
+
+                TransportModeOptionItem(
+                    title = "共享目录（SAF · 阴阳师适用）",
+                    description = "授权 Android/media 写入，适配无缓存接口游戏",
+                    selected = state.transportMode == SeedTransportMode.SAF_MEDIA,
+                    enabled = !state.busy,
+                    onClick = { onSelectTransportMode(SeedTransportMode.SAF_MEDIA) }
+                )
+
+                if (state.transportMode == SeedTransportMode.SAF_MEDIA) {
+                    val authToneFg = if (state.safAuthorized) {
+                        if (dark) StatusSuccessDark else StatusSuccessLight
+                    } else {
+                        scheme.onSurfaceVariant
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(13.dp),
+                        color = scheme.surfaceVariant.copy(alpha = if (dark) 0.5f else 0.65f),
+                        border = BorderStroke(1.dp, scheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Icon(
-                                imageVector = AppIcons.Check,
+                                imageVector = AppIcons.Folder,
                                 contentDescription = null,
-                                tint = badgeFg,
+                                tint = authToneFg,
                                 modifier = Modifier.size(17.dp)
                             )
-                        } else {
                             Text(
-                                text = stepNumber.toString(),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = badgeFg
+                                text = if (state.safAuthorized) "已授权 Android/media" else "待授权 Android/media",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = authToneFg,
+                                modifier = Modifier.weight(1f)
                             )
+                            TextButton(
+                                onClick = onAuthorizeSafDirectory,
+                                enabled = !state.busy,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (state.safAuthorized) "更换" else "授权",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }
+            }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = scheme.onSurface
+            Button(
+                onClick = onPrepareIosLogin,
+                enabled = !state.busy,
+                shape = RoundedCornerShape(15.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = scheme.primary),
+                contentPadding = PaddingValues(vertical = 15.dp, horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = AppIcons.UserScan,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (hasGame) "一键准备 iOS 登录" else "先选择目标游戏",
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(13.dp),
+                color = warnBg,
+                border = BorderStroke(1.dp, warnFg.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Alert,
+                        contentDescription = null,
+                        tint = warnFg,
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .size(17.dp)
                     )
                     Text(
-                        text = subtitle,
+                        text = "若准备前已点开登录弹窗，回游戏必须先点右上角「×」关闭再重开，直接点旧列表会一直转圈。",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = warnFg
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(13.dp),
+                color = scheme.surfaceVariant.copy(alpha = if (dark) 0.45f else 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "• 切号后若变回安卓号：在「切换账号」里再点登一次即恢复 iOS。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "• 想切回安卓角色：在「切换账号」列表删掉该账号记录后重登。",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant
                     )
                 }
             }
-
-            content()
         }
     }
 }
@@ -1237,13 +1015,13 @@ private fun TransportModeOptionItem(
             .clickable(enabled = enabled, onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
                     text = title,
@@ -1272,15 +1050,12 @@ private fun BridgeScreenPreview() {
                     versionName = "0.16.8",
                     installed = true
                 ),
-                identityRemainingSec = 542,
-                statusMessage = "账号已识别。请到游戏内点「切换账号」，再回来准备 iOS 登录。",
-                statusTone = StatusTone.Success
+                statusMessage = "先在「光·遇」登录目标账号，再点下方按钮一键准备。",
+                statusTone = StatusTone.Neutral
             ),
             onOpenGame = {},
             onSelectInstalledGame = {},
             onRefreshApps = {},
-            onIdentifyAccount = {},
-            onOpenSwitchWindow = {},
             onSelectTransportMode = {},
             onAuthorizeSafDirectory = {},
             onPrepareIosLogin = {}

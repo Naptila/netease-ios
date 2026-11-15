@@ -22,8 +22,8 @@ android {
         applicationId = "me.naptila.neteaseios"
         minSdk = 28
         targetSdk = 37
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.0"
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 2
+        versionName = System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.1"
     }
 
     signingConfigs {

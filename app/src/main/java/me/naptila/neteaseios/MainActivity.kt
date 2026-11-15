@@ -2,18 +2,15 @@ package me.naptila.neteaseios
 
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.naptila.neteaseios.bridge.BridgeProtocol
@@ -48,7 +45,7 @@ class MainActivity : ComponentActivity() {
             val uri = result.data?.data
             if (spec == null || result.resultCode != RESULT_OK || uri == null) {
                 if (shouldResumePrepare) {
-                    complete("未授权目录，本次登录准备已取消。", StatusTone.Warning)
+                    complete("未授权目录，本次准备已取消。", StatusTone.Warning)
                 } else {
                     complete("已取消目录授权。", StatusTone.Neutral)
                 }
@@ -68,18 +65,18 @@ class MainActivity : ComponentActivity() {
 
                         if (shouldResumePrepare) {
                             if (uiState.currentGame?.spec?.packageName == spec.packageName) {
-                                begin(capture = false)
+                                beginPrepare()
                             } else {
-                                showMessage("已保存目录授权，请重新选择目标游戏后再执行。", StatusTone.Warning)
+                                showMessage("已保存目录授权，请重新选择目标游戏。", StatusTone.Warning)
                             }
                         } else {
-                            showMessage("已保存「${spec.displayName}」的共享目录授权。", StatusTone.Success)
+                            showMessage("已保存「${spec.displayName}」目录授权。", StatusTone.Success)
                         }
                     } catch (e: Exception) {
                         val msg = if (e is SeedStorageException) {
-                            e.message.orEmpty().ifBlank { "目录授权失败，请重新选择。" }
+                            e.message.orEmpty().ifBlank { "目录授权失败，请重试。" }
                         } else {
-                            "目录授权失败，请重新选择。"
+                            "目录授权失败，请重试。"
                         }
                         complete(msg, StatusTone.Warning)
                     }
@@ -90,6 +87,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         MpayBridgeSession.cleanup(this)
         val savedGame = loadSavedGameSpec()?.let { GameTarget.inspect(this, it, loadIcon = true) }
 
@@ -105,30 +103,15 @@ class MainActivity : ComponentActivity() {
         loadInstalledAppsAsync()
 
         setContent {
-            LaunchedEffect(uiState.identityFresh, uiState.currentGame?.spec?.packageName) {
-                while (uiState.identityFresh) {
-                    val pkg = uiState.currentGame?.spec?.packageName ?: break
-                    delay(1_000L)
-                    val rem = remainingIdentitySeconds(pkg)
-                    if (rem <= 0 && uiState.identityRemainingSec > 0) {
-                        refreshFromPrefs(updateStatusMessage = !uiState.busy)
-                    } else {
-                        uiState = uiState.copy(identityRemainingSec = rem)
-                    }
-                }
-            }
-
             NeteaseiosTheme {
                 BridgeScreen(
                     state = uiState,
                     onOpenGame = ::openTargetGame,
                     onSelectInstalledGame = ::selectInstalledGame,
                     onRefreshApps = ::loadInstalledAppsAsync,
-                    onIdentifyAccount = { begin(capture = true) },
-                    onOpenSwitchWindow = ::openSwitchAccountWindow,
                     onSelectTransportMode = ::selectTransportMode,
                     onAuthorizeSafDirectory = ::authorizeCurrentGameDirectory,
-                    onPrepareIosLogin = { begin(capture = false) }
+                    onPrepareIosLogin = ::beginPrepare
                 )
             }
         }
@@ -200,7 +183,7 @@ class MainActivity : ComponentActivity() {
     private fun authorizeCurrentGameDirectory() {
         if (uiState.busy) return
         val spec = uiState.currentGame?.spec ?: run {
-            showMessage("请先在上方选择目标游戏应用。", StatusTone.Warning)
+            showMessage("请先选择目标游戏。", StatusTone.Warning)
             return
         }
         launchDirectoryPicker(spec, resumePrepare = false)
@@ -213,16 +196,13 @@ class MainActivity : ComponentActivity() {
         directorySpec = spec
         resumePrepareAfterGrant = resumePrepare
         uiState = uiState.copy(busy = true)
-        showMessage(
-            "请选择内部存储的 Android/media 或 ${spec.packageName} 子目录，允许助手写入临时准备文件。",
-            StatusTone.Warning
-        )
+        showMessage("请选择内部存储 Android/media（或 ${spec.packageName}）目录。", StatusTone.Warning)
         try {
             directoryPicker.launch(SeedStorage.directoryIntent())
         } catch (_: Exception) {
             directorySpec = null
             resumePrepareAfterGrant = false
-            complete("系统目录选择器不可用，当前设备无法使用共享目录方式。", StatusTone.Error)
+            complete("系统目录选择器不可用。", StatusTone.Error)
         }
     }
 
@@ -247,7 +227,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openTargetGame() {
         val spec = uiState.currentGame?.spec ?: run {
-            showMessage("请先在上方选择目标游戏应用。", StatusTone.Warning)
+            showMessage("请先选择目标游戏。", StatusTone.Warning)
             return
         }
         try {
@@ -255,45 +235,21 @@ class MainActivity : ComponentActivity() {
                 showMessage("无法打开「${spec.displayName}」。", StatusTone.Error)
             }
         } catch (_: Exception) {
-            showMessage("无法打开「${spec.displayName}」，请手动启动游戏。", StatusTone.Warning)
+            showMessage("无法打开「${spec.displayName}」，请手动启动。", StatusTone.Warning)
         }
     }
 
-    private fun openSwitchAccountWindow() {
-        val spec = uiState.currentGame?.spec ?: run {
-            showMessage("请先在上方选择目标游戏应用。", StatusTone.Warning)
-            return
-        }
-        try {
-            if (!GameTarget.open(this, spec.packageName)) {
-                showMessage("无法打开「${spec.displayName}」。", StatusTone.Error)
-            }
-        } catch (_: Exception) {
-            showMessage("请手动打开「${spec.displayName}」，并停在网易登录窗口。", StatusTone.Warning)
-        }
-    }
-
-    private fun begin(capture: Boolean) {
+    private fun beginPrepare() {
         if (uiState.busy) return
         val spec = uiState.currentGame?.spec ?: run {
-            showMessage("请先在上方选择目标游戏应用。", StatusTone.Warning)
-            return
-        }
-        if (!capture && remainingIdentitySeconds(spec.packageName) <= 0) {
-            showMessage("请先在「${spec.displayName}」登录所需账号，再点「识别当前账号」。", StatusTone.Warning)
+            showMessage("请先选择目标游戏。", StatusTone.Warning)
             return
         }
 
         val selectedMode = uiState.transportMode
-        val waitingText = if (capture) {
-            "正在打开「${spec.displayName}」读取当前账号…"
-        } else {
-            "正在准备 iOS 登录；返回「${spec.displayName}」后请验证同一账号。"
-        }
-
         uiState = uiState.copy(
             busy = true,
-            statusMessage = waitingText,
+            statusMessage = "正在连接「${spec.displayName}」准备 iOS 登录…",
             statusTone = StatusTone.Neutral
         )
 
@@ -303,21 +259,13 @@ class MainActivity : ComponentActivity() {
                 val next = MpayBridgeSession(
                     context = this,
                     target = target,
-                    capture = capture,
                     transportMode = selectedMode,
                     listener = object : MpayBridgeSession.Listener {
-                        override fun onIdentified(gameId: String) {
-                            complete(
-                                text = "已识别当前网易账号（代号 $gameId）。请到「${target.appLabel}」点「切换账号」，停在登录窗口后回来准备 iOS 登录。",
-                                tone = StatusTone.Success
-                            )
-                        }
-
-                        override fun onSubmitted(confirmed: Boolean, usedSaf: Boolean) {
+                        override fun onSubmitted(gameId: String, confirmed: Boolean, usedSaf: Boolean) {
                             val text = if (confirmed) {
-                                "SDK 已接受登录准备。请在「${target.appLabel}」点击账号列表右上角的「×」，刷新账号列表后重新登录并核对角色。"
+                                "准备完成，回「${target.appLabel}」点「切换账号」重登即可。"
                             } else {
-                                "准备请求已发送，但未收到 SDK 确认。请在「${target.appLabel}」先点账号列表右上角的「×」关闭并重开刷新，再重新验证同一账号并核对实际角色。"
+                                "请求已发送（无独立回调），回「${target.appLabel}」点「切换账号」重登核对即可。"
                             }
                             complete(
                                 text = text,
@@ -348,21 +296,15 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: SeedStorageException) {
                 runOnUiThread {
-                    complete(e.message ?: "共享目录写入失败。", StatusTone.Error)
+                    complete(e.message ?: "准备文件通道不可用。", StatusTone.Error)
                 }
-            } catch (e: IllegalStateException) {
-                val text = if (e.message == "identity-expired") {
-                    "当前游戏的账号识别已过期，请重新识别当前账号。"
-                } else {
-                    "「${spec.displayName}」缺少必要的客户端运行环境，该游戏不支持此登录方式。"
+            } catch (_: IllegalStateException) {
+                runOnUiThread {
+                    complete("「${spec.displayName}」不支持此登录方式。", StatusTone.Warning)
                 }
-                runOnUiThread { complete(text, StatusTone.Warning) }
             } catch (_: Exception) {
                 runOnUiThread {
-                    complete(
-                        "未能完成「${spec.displayName}」的准备文件写入，请检查目录授权与剩余空间后重试。",
-                        StatusTone.Error
-                    )
+                    complete("准备失败，请检查目录授权或剩余空间后重试。", StatusTone.Error)
                 }
             }
         }, "NeteaseBridgeSetup").apply {
@@ -391,11 +333,10 @@ class MainActivity : ComponentActivity() {
         if (current == null) {
             uiState = uiState.copy(
                 detectedGameId = null,
-                identityRemainingSec = 0,
                 submittedCurrent = false,
                 unconfirmedCurrent = false,
                 safAuthorized = false,
-                statusMessage = if (updateStatusMessage && !uiState.busy) "请先在上方选择目标网易游戏。" else uiState.statusMessage,
+                statusMessage = if (updateStatusMessage && !uiState.busy) "请先选择目标网易游戏。" else uiState.statusMessage,
                 statusTone = if (updateStatusMessage && !uiState.busy) StatusTone.Neutral else uiState.statusTone
             )
             return
@@ -403,7 +344,6 @@ class MainActivity : ComponentActivity() {
 
         val pkg = current.spec.packageName
         val gameName = current.spec.displayName
-        val remainingSec = remainingIdentitySeconds(pkg)
         val p = MpayBridgeSession.prefs(this)
         val detectedGid = p.getString("last_game_id_$pkg", null)
         val stateForCurrentPkg = p.getString("state_package", null) == pkg
@@ -419,33 +359,28 @@ class MainActivity : ComponentActivity() {
 
         if (updateStatusMessage && !uiState.busy) {
             when {
-                state == "identified" && remainingSec > 0 -> {
-                    message = "「$gameName」账号已识别。请到游戏内点「切换账号」，再回来准备 iOS 登录。"
-                    tone = StatusTone.Success
-                }
-
                 submittedCurrent -> {
-                    message = "SDK 已接受登录准备，请在「$gameName」点账号列表右上角的「×」刷新后重新登录并核对角色。"
+                    message = "准备完成，回「$gameName」点「切换账号」重登即可。"
                     tone = StatusTone.Success
                 }
 
                 unconfirmedCurrent -> {
-                    message = "准备请求已发送，但未收到 SDK 确认。请在「$gameName」点账号列表右上角的「×」刷新列表、重新验证同一账号并核对角色。"
+                    message = "请求已发送（无独立回调），回「$gameName」点「切换账号」重登核对即可。"
                     tone = StatusTone.Warning
                 }
 
                 state == "failed" -> {
-                    message = p.getString("last_error", "本次操作未完成，请重试。") ?: "本次操作未完成，请重试。"
+                    message = p.getString("last_error", "操作未完成，请重试。") ?: "操作未完成，请重试。"
                     tone = StatusTone.Error
                 }
 
-                state == "identifying" || state == "preparing" -> {
-                    message = "本次操作尚未完成；若已离开准备网页，请关闭网页后重试。"
+                state == "preparing" -> {
+                    message = "操作未完成；若已离开网页，请关闭网页后重试。"
                     tone = StatusTone.Warning
                 }
 
                 else -> {
-                    message = "当前目标：$gameName。请按下方步骤准备 iOS 登录。"
+                    message = "先在「$gameName」登录账号，再点下方按钮一键准备。"
                     tone = StatusTone.Neutral
                 }
             }
@@ -453,7 +388,6 @@ class MainActivity : ComponentActivity() {
 
         uiState = uiState.copy(
             detectedGameId = detectedGid,
-            identityRemainingSec = remainingSec,
             submittedCurrent = submittedCurrent,
             unconfirmedCurrent = unconfirmedCurrent,
             transportMode = mode,
@@ -461,14 +395,5 @@ class MainActivity : ComponentActivity() {
             statusMessage = message,
             statusTone = tone
         )
-    }
-
-    private fun remainingIdentitySeconds(packageName: String): Int {
-        val p = MpayBridgeSession.prefs(this)
-        if (p.getString("uid", null) == null) return 0
-        if (p.getString("captured_package", null) != packageName) return 0
-        val elapsed = System.currentTimeMillis() - p.getLong("captured_at", 0L)
-        if (elapsed < 0L || elapsed >= BridgeProtocol.IDENTITY_TTL_MS) return 0
-        return ((BridgeProtocol.IDENTITY_TTL_MS - elapsed + 999L) / 1000L).toInt()
     }
 }

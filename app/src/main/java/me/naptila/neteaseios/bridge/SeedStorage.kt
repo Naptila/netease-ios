@@ -60,6 +60,53 @@ internal object SeedStorage {
         }.getOrDefault(false)
     }
 
+    /**
+     * Verifies transport readiness before launching GMWebviewActivity so missing providers
+     * or missing SAF grants are surfaced immediately without opening an empty WebView first.
+     */
+    fun ensureReady(context: Context, target: GameTarget, mode: SeedTransportMode) {
+        if (mode == SeedTransportMode.STANDARD) {
+            val probeUri = target.cacheUri("probe")
+            val reachable = runCatching {
+                context.contentResolver.acquireUnstableContentProviderClient(probeUri)?.use { true } ?: false
+            }.getOrDefault(false)
+            if (!reachable) {
+                throw SeedStorageException(
+                    "无法连接「${target.appLabel}」缓存接口；若该游戏未开放缓存接口（如阴阳师），请切换为「共享目录方式」后重试。"
+                )
+            }
+            return
+        }
+
+        val pkg = target.spec.packageName
+        val saved = MpayBridgeSession.prefs(context).getString("media_tree_$pkg", null)
+            ?: throw DirectoryAccessRequired()
+        val tree = runCatching { Uri.parse(saved) }.getOrNull() ?: throw DirectoryAccessRequired()
+        if (runCatching { requireTree(tree, pkg) }.isFailure) {
+            throw DirectoryAccessRequired()
+        }
+        val persisted = runCatching {
+            context.contentResolver.persistedUriPermissions.any {
+                it.uri == tree && it.isReadPermission && it.isWritePermission
+            }
+        }.getOrDefault(false)
+        if (!persisted) {
+            throw DirectoryAccessRequired()
+        }
+
+        val folderId = "$MEDIA_ID/$pkg"
+        val folder = DocumentsContract.buildDocumentUriUsingTree(tree, folderId)
+        val folderExists = runCatching {
+            context.contentResolver.query(folder, arrayOf(DocumentsContract.Document.COLUMN_MIME_TYPE), null, null, null)
+                ?.use { it.moveToFirst() && it.getString(0) == DocumentsContract.Document.MIME_TYPE_DIR } == true
+        }.getOrDefault(false)
+        if (!folderExists && DocumentsContract.getTreeDocumentId(tree) != MEDIA_ID) {
+            throw DirectoryAccessRequired()
+        }
+
+        resolvePrimaryStorageRoot(context)
+    }
+
     fun directoryIntent(): Intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
         addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -110,7 +157,7 @@ internal object SeedStorage {
             } catch (_: Exception) {
                 delete(context, cache.toString())
                 throw SeedStorageException(
-                    "无法写入「${target.appLabel}」缓存接口；若该游戏未开放缓存接口（如阴阳师），请在第三步手动切换为「共享目录方式」后重试。"
+                    "无法写入「${target.appLabel}」缓存接口；若该游戏未开放缓存接口（如阴阳师），请切换为「共享目录方式」后重试。"
                 )
             }
         }
@@ -238,11 +285,18 @@ internal object SeedStorage {
     }
 
     fun cleanup(context: Context) {
-        val entries = MpayBridgeSession.prefs(context)
-            .getStringSet("temporary_uris", emptySet())
-            .orEmpty()
-            .toSet()
+        val p = MpayBridgeSession.prefs(context)
+        val entries = p.getStringSet("temporary_uris", emptySet()).orEmpty().toSet()
         entries.forEach { delete(context, it) }
+        // Clean up any legacy keys from older two-step versions.
+        if (p.contains("uid") || p.contains("captured_at")) {
+            p.edit()
+                .remove("uid")
+                .remove("captured_at")
+                .remove("captured_package")
+                .remove("captured_game_id")
+                .apply()
+        }
     }
 
     /** Accept only this helper's random temp names under the two supported transports. */

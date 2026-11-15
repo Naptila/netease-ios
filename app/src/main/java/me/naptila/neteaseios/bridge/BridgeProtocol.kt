@@ -4,7 +4,7 @@ package me.naptila.neteaseios.bridge
  * Target NetEase MPay game specification.
  *
  * [gameId] is the MPay/UniSDK game code (e.g. "ma75"). When null, the bridge automatically
- * reads it from gameContextInfo during Step 1 and binds it to the current session.
+ * reads it from gameContextInfo and binds it to the selected package.
  */
 data class GameSpec(
     val packageName: String,
@@ -25,7 +25,6 @@ object BridgeProtocol {
     const val DEFAULT_LOGIN_CHANNEL = "netease"
     const val DEFAULT_LOGIN_TYPE = 1
     const val IOS_CLIENT_TYPE = 2
-    const val IDENTITY_TTL_MS = 600_000L
 
     private val GAME_ID_REGEX = Regex("^[a-zA-Z0-9_.-]{1,64}$")
     private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")

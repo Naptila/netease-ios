@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
-import me.naptila.neteaseios.MainActivity
 import org.json.JSONObject
 import java.io.IOException
 import java.net.InetAddress
@@ -21,20 +20,20 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Short-lived loopback MPay iOS login bridge for NetEase UniSDK/GMBridge5 games.
- * Never receives passwords, OTPs or login tokens.
+ * Single-session loopback MPay iOS login bridge for NetEase UniSDK/GMBridge5 games.
+ * Reads the currently logged-in UID & game_id via gameContextInfo and immediately loads
+ * an empty-token iOS session seed in one seamless pass.
+ * Never receives passwords, OTPs or active login tokens.
  */
 class MpayBridgeSession(
     context: Context,
     private val target: GameTarget,
-    private val capture: Boolean,
     private val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
     private val listener: Listener
 ) : AutoCloseable {
 
     interface Listener {
-        fun onIdentified(gameId: String)
-        fun onSubmitted(confirmed: Boolean, usedSaf: Boolean)
+        fun onSubmitted(gameId: String, confirmed: Boolean, usedSaf: Boolean)
         fun onFailed(message: String)
     }
 
@@ -51,30 +50,16 @@ class MpayBridgeSession(
     private val nonce: String
     private val base: String
     private val host: String
-    private val seedUid: String?
-    private val expectedGameId: String?
+    private val expectedGameId: String? = target.spec.gameId
+    @Volatile
+    private var capturedGameId: String = ""
+    @Volatile
     private var preparedSeed: PreparedSeed? = null
     @Volatile
     private var unconfirmedGraceDelete = false
 
     init {
-        val p = prefs(appContext)
-        if (capture) {
-            seedUid = null
-            expectedGameId = target.spec.gameId
-        } else {
-            val savedUid = p.getString("uid", null)
-            val savedPkg = p.getString("captured_package", null)
-            val savedAt = p.getLong("captured_at", 0L)
-            if (savedUid == null ||
-                savedPkg != target.spec.packageName ||
-                System.currentTimeMillis() - savedAt > BridgeProtocol.IDENTITY_TTL_MS
-            ) {
-                throw IllegalStateException("identity-expired")
-            }
-            seedUid = savedUid
-            expectedGameId = target.spec.gameId ?: p.getString("captured_game_id", null)
-        }
+        SeedStorage.ensureReady(appContext, target, transportMode)
 
         val random = ByteArray(24).also { SecureRandom().nextBytes(it) }
         nonce = random.joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
@@ -85,33 +70,16 @@ class MpayBridgeSession(
             soTimeout = 1000
         }
         host = "127.0.0.1:${server.localPort}"
-
-        if (!capture) {
-            try {
-                writeSeed()
-            } catch (e: Exception) {
-                runCatching { server.close() }
-                SeedStorage.deleteAsync(appContext, preparedSeed?.cleanupUri?.toString())
-                throw e
-            }
-        }
     }
 
     fun start() {
-        val pending = prefs(appContext).edit()
-            .putString("state", if (capture) "identifying" else "preparing")
+        prefs(appContext).edit()
+            .putString("state", "preparing")
             .putString("state_package", target.spec.packageName)
             .remove("last_error")
             .putString("operation", nonce)
             .remove("completed_operation")
-        if (capture) {
-            pending
-                .remove("uid")
-                .remove("captured_at")
-                .remove("captured_package")
-                .remove("captured_game_id")
-        }
-        pending.apply()
+            .apply()
 
         Thread(::serve, "NeteaseLocalBridge").apply {
             isDaemon = true
@@ -121,15 +89,12 @@ class MpayBridgeSession(
         main.postDelayed({
             if (closed.get()) return@postDelayed
             if (!resultDelivered.get()) {
-                fail(
-                    if (capture) "未能识别账号，请先在「${target.appLabel}」正常登录，再回来重试。"
-                    else "未能完成 iOS 登录准备，请返回助手重试。"
-                )
+                fail("未能完成 iOS 登录准备，请先确保已在「${target.appLabel}」正常登录账号后再重试。")
             }
             close()
         }, 45_000L)
 
-        // Opening a fresh container after the previous one has finished avoids stale static WebView state.
+        // Opening a fresh container after any previous one has finished avoids stale static WebView state.
         main.postDelayed({
             if (closed.get()) return@postDelayed
             val intent = Intent().apply {
@@ -163,7 +128,12 @@ class MpayBridgeSession(
 
                     val route = request.path.substring(base.length)
                     if (request.method == "GET" && route == "/page") {
-                        reply(socket, 200, "text/html; charset=utf-8", page())
+                        reply(
+                            socket,
+                            200,
+                            "text/html; charset=utf-8",
+                            BridgePage.render(appLabel = target.appLabel, base = "http://$host$base")
+                        )
                         return@use
                     }
                     if (request.method != "POST") {
@@ -178,54 +148,66 @@ class MpayBridgeSession(
                     }
 
                     when (route) {
-                        "/identity" -> {
-                            if (!capture) {
-                                reply(socket, 403, "application/json", "{\"ok\":false}")
+                        "/prepare" -> {
+                            val parsed = runCatching { readIdentity(input) }.getOrNull()
+                            if (parsed == null) {
+                                fail("游戏客户端返回的上下文格式不匹配，请重新打开「${target.appLabel}」后再试。")
+                                reply(socket, 200, "application/json", "{\"ok\":false,\"reason\":\"source_mismatch\"}")
                                 return@use
                             }
-                            val parsed = readIdentity(input, allowEmpty = false)
-                            val uid = parsed.uid ?: throw IOException("identity-missing")
-                            val first = resultDelivered.compareAndSet(false, true)
-                            if (first) {
-                                prefs(appContext).edit()
-                                    .putString("uid", uid)
-                                    .putLong("captured_at", System.currentTimeMillis())
-                                    .putString("captured_package", target.spec.packageName)
-                                    .putString("captured_game_id", parsed.gameId)
-                                    .putString("last_game_id_${target.spec.packageName}", parsed.gameId)
-                                    .putString("state", "identified")
-                                    .putString("state_package", target.spec.packageName)
-                                    .putString("completed_operation", nonce)
-                                    .apply()
+                            val uid = parsed.uid
+                            if (uid == null) {
+                                fail("未读取到已登录的网易账号，请先在「${target.appLabel}」正常登录该账号后再试。")
+                                reply(socket, 200, "application/json", "{\"ok\":false,\"reason\":\"not_logged_in\"}")
+                                return@use
                             }
-                            reply(socket, 200, "application/json", "{\"ok\":true}")
-                            if (first) {
-                                main.post { listener.onIdentified(parsed.gameId) }
-                                main.postDelayed({
-                                    val back = Intent(appContext, MainActivity::class.java)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                                    runCatching { appContext.startActivity(back) }
-                                }, 1800L)
-                            }
-                        }
 
-                        "/validate" -> {
-                            if (capture) {
-                                reply(socket, 403, "application/json", "{\"ok\":false}")
+                            capturedGameId = parsed.gameId
+                            prefs(appContext).edit()
+                                .putString("last_game_id_${target.spec.packageName}", parsed.gameId)
+                                .apply()
+
+                            val seed = try {
+                                getOrWriteSeed(uid)
+                            } catch (e: SeedStorageException) {
+                                fail(e.message ?: "准备文件写入失败，请检查目录授权或写入方式后重试。")
+                                reply(socket, 200, "application/json", "{\"ok\":false,\"reason\":\"storage_failed\"}")
+                                return@use
+                            } catch (_: DirectoryAccessRequired) {
+                                fail("共享媒体目录授权已失效，请返回助手重新授权 Android/media 目录。")
+                                reply(socket, 200, "application/json", "{\"ok\":false,\"reason\":\"directory_required\"}")
+                                return@use
+                            } catch (_: Exception) {
+                                fail("准备文件写入失败，请返回助手检查写入方式与剩余空间后重试。")
+                                reply(socket, 200, "application/json", "{\"ok\":false,\"reason\":\"storage_failed\"}")
                                 return@use
                             }
-                            val parsed = readIdentity(input, allowEmpty = true)
-                            val allowed = parsed.uid == null || seedUid == parsed.uid
-                            reply(socket, 200, "application/json", if (allowed) "{\"ok\":true}" else "{\"ok\":false}")
+
+                            val command = JSONObject()
+                                .put("methodId", "execute_extend_func")
+                                .put(
+                                    "reqData",
+                                    JSONObject()
+                                        .put("channel", BridgeProtocol.DEFAULT_LOGIN_CHANNEL)
+                                        .put("methodId", "loadMpaySession")
+                                        .put("path", seed.sdkPath)
+                                        .put("callback_mode", "web")
+                                )
+                            val resp = JSONObject()
+                                .put("ok", true)
+                                .put("command", command)
+                                .toString()
+                            reply(socket, 200, "application/json", resp)
                         }
 
                         "/submitted" -> {
-                            if (capture) {
+                            if (preparedSeed == null) {
                                 reply(socket, 403, "application/json", "{\"ok\":false}")
                                 return@use
                             }
                             val confirmed = input.optBoolean("confirmed", false)
                             val usedSaf = preparedSeed?.usedSaf == true
+                            val gameId = capturedGameId
                             val first = resultDelivered.compareAndSet(false, true)
                             if (first) {
                                 unconfirmedGraceDelete = !confirmed
@@ -237,24 +219,20 @@ class MpayBridgeSession(
                             }
                             reply(socket, 200, "application/json", "{\"ok\":true}")
                             if (first) {
-                                main.post { listener.onSubmitted(confirmed, usedSaf) }
+                                main.post { listener.onSubmitted(gameId, confirmed, usedSaf) }
                             }
                         }
 
                         "/failed" -> {
                             val reason = input.optString("reason")
                             val message = when (reason) {
-                                "identity_changed" -> "游戏内当前账号或目标客户端已改变，请重新识别。"
+                                "not_logged_in" -> "未读取到已登录的网易账号，请先在「${target.appLabel}」正常登录该账号后再试。"
                                 "no_callback" -> "没有收到游戏接口响应，请返回游戏关闭当前页面后重试。"
-                                "bridge_missing" -> "游戏网页桥未就绪，请先打开「${target.appLabel}」再重试。"
+                                "bridge_missing" -> "游戏网页桥未就绪，请先打开「${target.appLabel}」登录进入主页后再试。"
                                 "sdk_read_failed" -> "SDK 未能读取准备文件，该游戏可能不支持当前写入方式。"
                                 "sdk_invalid_session" -> "SDK 已读取文件，但未接受账号准备格式，当前游戏仍需适配。"
                                 "sdk_rejected" -> "SDK 拒绝了本次登录准备，当前游戏仍需适配。"
-                                else -> if (capture) {
-                                    "未读取到已登录的网易账号，请先在「${target.appLabel}」完成登录。"
-                                } else {
-                                    "本次准备未完成，请返回游戏关闭当前页面后重试。"
-                                }
+                                else -> "本次准备未完成，请返回游戏关闭当前页面后重试。"
                             }
                             reply(socket, 200, "application/json", "{\"ok\":true}")
                             fail(message)
@@ -269,13 +247,13 @@ class MpayBridgeSession(
         }
     }
 
-    private fun readIdentity(input: JSONObject, allowEmpty: Boolean): ContextIdentity {
+    private fun readIdentity(input: JSONObject): ContextIdentity {
         val game = input.optString("game")
         if (!BridgeProtocol.supportedSource(game = game, expectedGameId = expectedGameId)) {
             throw IOException("source")
         }
         val full = input.optString("full")
-        if (full.isEmpty() && allowEmpty) {
+        if (full.isBlank()) {
             return ContextIdentity(uid = null, gameId = game)
         }
         return ContextIdentity(
@@ -284,11 +262,13 @@ class MpayBridgeSession(
         )
     }
 
-    private fun writeSeed() {
-        val fileName = "ntes_mpay_${UUID.randomUUID().toString().replace("-", "")}.tmp"
+    @Synchronized
+    private fun getOrWriteSeed(uid: String): PreparedSeed {
+        preparedSeed?.let { return it }
 
+        val fileName = "ntes_mpay_${UUID.randomUUID().toString().replace("-", "")}.tmp"
         val user = JSONObject()
-            .put("id", seedUid)
+            .put("id", uid)
             .put("token", "")
             .put("need_mask", true)
             .put("login_type", BridgeProtocol.DEFAULT_LOGIN_TYPE)
@@ -311,31 +291,7 @@ class MpayBridgeSession(
 
         val cleanupUri = seed.cleanupUri.toString()
         main.postDelayed({ SeedStorage.deleteAsync(appContext, cleanupUri) }, 45_000L)
-    }
-
-    private fun page(): String {
-        val payload = if (capture) {
-            "null"
-        } else {
-            val seed = preparedSeed ?: throw IOException("seed-missing")
-            JSONObject()
-                .put("methodId", "execute_extend_func")
-                .put(
-                    "reqData",
-                    JSONObject()
-                        .put("channel", BridgeProtocol.DEFAULT_LOGIN_CHANNEL)
-                        .put("methodId", "loadMpaySession")
-                        .put("path", seed.sdkPath)
-                        .put("callback_mode", "web")
-                )
-                .toString()
-        }
-        return BridgePage.render(
-            capture = capture,
-            appLabel = target.appLabel,
-            base = "http://$host$base",
-            payload = payload
-        )
+        return seed
     }
 
     private fun fail(message: String) {
