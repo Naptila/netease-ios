@@ -25,6 +25,7 @@ object BridgeProtocol {
     const val DEFAULT_LOGIN_CHANNEL = "netease"
     const val DEFAULT_LOGIN_TYPE = 1
     const val IOS_CLIENT_TYPE = 2
+    const val ANDROID_CLIENT_TYPE = 1
 
     private val GAME_ID_REGEX = Regex("^[a-zA-Z0-9_.-]{1,64}$")
     private val PACKAGE_NAME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")

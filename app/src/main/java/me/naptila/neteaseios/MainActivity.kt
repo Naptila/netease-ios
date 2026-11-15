@@ -23,6 +23,7 @@ import me.naptila.neteaseios.bridge.SeedStorage
 import me.naptila.neteaseios.bridge.SeedStorageException
 import me.naptila.neteaseios.bridge.SeedTransportMode
 import me.naptila.neteaseios.ui.BridgeScreen
+import me.naptila.neteaseios.ui.OperationMode
 import me.naptila.neteaseios.ui.BridgeUiState
 import me.naptila.neteaseios.ui.StatusTone
 import me.naptila.neteaseios.ui.theme.NeteaseiosTheme
@@ -111,7 +112,16 @@ class MainActivity : ComponentActivity() {
                     onRefreshApps = ::loadInstalledAppsAsync,
                     onSelectTransportMode = ::selectTransportMode,
                     onAuthorizeSafDirectory = ::authorizeCurrentGameDirectory,
-                    onPrepareIosLogin = ::beginPrepare
+                    onPrepareIosLogin = {
+                        beginPrepare(
+                            clientType = if (uiState.operationMode == OperationMode.SWITCH_IOS) {
+                                BridgeProtocol.IOS_CLIENT_TYPE
+                            } else {
+                                BridgeProtocol.ANDROID_CLIENT_TYPE
+                            }
+                        )
+                    },
+                    onSelectOperationMode = { mode -> uiState = uiState.copy(operationMode = mode) }
                 )
             }
         }
@@ -132,9 +142,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        session?.close()
-        session = null
-        super.onDestroy()
+
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -239,7 +247,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun beginPrepare() {
+    private fun beginPrepare(clientType: Int = BridgeProtocol.IOS_CLIENT_TYPE) {
         if (uiState.busy) return
         val spec = uiState.currentGame?.spec ?: run {
             showMessage("请先选择目标游戏。", StatusTone.Warning)
@@ -253,6 +261,7 @@ class MainActivity : ComponentActivity() {
             statusTone = StatusTone.Neutral
         )
 
+
         Thread({
             try {
                 val target = GameTarget.verify(this, spec)
@@ -260,8 +269,14 @@ class MainActivity : ComponentActivity() {
                     context = this,
                     target = target,
                     transportMode = selectedMode,
+                    clientType = clientType,
                     listener = object : MpayBridgeSession.Listener {
                         override fun onSubmitted(gameId: String, confirmed: Boolean, usedSaf: Boolean) {
+                            MpayBridgeSession.prefs(this@MainActivity)
+                                .edit()
+                                .putInt("last_client_type_${target.spec.packageName}", clientType)
+                                .apply()
+                            uiState = uiState.copy(lastClientType = clientType)
                             val text = if (confirmed) {
                                 "准备完成，回「${target.appLabel}」点「切换账号」重登即可。"
                             } else {
@@ -314,9 +329,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun complete(text: String, tone: StatusTone) {
-        session?.close()
-        session = null
-        uiState = uiState.copy(busy = false)
+
         refreshFromPrefs(updateStatusMessage = false)
         showMessage(text, tone)
     }
@@ -336,6 +349,7 @@ class MainActivity : ComponentActivity() {
                 submittedCurrent = false,
                 unconfirmedCurrent = false,
                 safAuthorized = false,
+                lastClientType = null,
                 statusMessage = if (updateStatusMessage && !uiState.busy) "请先选择目标网易游戏。" else uiState.statusMessage,
                 statusTone = if (updateStatusMessage && !uiState.busy) StatusTone.Neutral else uiState.statusTone
             )
@@ -353,6 +367,8 @@ class MainActivity : ComponentActivity() {
         val unconfirmedCurrent = state == "unconfirmed" && currentOpMatches
         val mode = SeedStorage.getTransportMode(this, pkg)
         val safAuthorized = SeedStorage.hasValidDirectoryGrant(this, pkg)
+        val storedClientType = p.getInt("last_client_type_$pkg", 0)
+        val lastClientType = if (storedClientType == 1 || storedClientType == 2) storedClientType else null
 
         var message = uiState.statusMessage
         var tone = uiState.statusTone
@@ -392,6 +408,7 @@ class MainActivity : ComponentActivity() {
             unconfirmedCurrent = unconfirmedCurrent,
             transportMode = mode,
             safAuthorized = safAuthorized,
+            lastClientType = lastClientType,
             statusMessage = message,
             statusTone = tone
         )

@@ -29,6 +29,7 @@ class MpayBridgeSession(
     context: Context,
     private val target: GameTarget,
     private val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
+    private val clientType: Int = BridgeProtocol.IOS_CLIENT_TYPE,
     private val listener: Listener
 ) : AutoCloseable {
 
@@ -276,7 +277,7 @@ class MpayBridgeSession(
             .put(
                 "pc_ext_info",
                 JSONObject()
-                    .put("src_client_type", BridgeProtocol.IOS_CLIENT_TYPE)
+                    .put("src_client_type", clientType)
                     .put("is_from_ticket_login", true)
             )
         val bytes = (JSONObject().put("user", user).toString() + "\n")
