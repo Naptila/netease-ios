@@ -277,6 +277,7 @@ class MpayBridgeSession(
                 "pc_ext_info",
                 JSONObject()
                     .put("src_client_type", BridgeProtocol.IOS_CLIENT_TYPE)
+                    .put("is_remember", true)
                     .put("is_from_ticket_login", true)
             )
         val bytes = (JSONObject().put("user", user).toString() + "\n")
