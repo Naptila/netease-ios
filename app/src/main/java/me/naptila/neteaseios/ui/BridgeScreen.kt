@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -223,6 +224,7 @@ private fun HeroHeaderCard(
     onOpenGame: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val uriHandler = LocalUriHandler.current
     val gradientColors = if (dark) {
         listOf(Color(0xFF182949), Color(0xFF131F36))
     } else {
@@ -242,7 +244,7 @@ private fun HeroHeaderCard(
                 .fillMaxWidth()
                 .background(Brush.linearGradient(gradientColors))
                 .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -275,6 +277,33 @@ private fun HeroHeaderCard(
                         color = scheme.onSurfaceVariant
                     )
                 }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HeaderLinkChip(
+                    icon = AppIcons.GitHub,
+                    label = "GitHub",
+                    accentColor = scheme.primary,
+                    dark = dark,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        runCatching { uriHandler.openUri("https://github.com/Naptila/netease-ios") }
+                    }
+                )
+                HeaderLinkChip(
+                    icon = AppIcons.Bilibili,
+                    label = "BiliBili",
+                    accentColor = if (dark) Color(0xFFFF85AD) else Color(0xFFE0487B),
+                    dark = dark,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        runCatching { uriHandler.openUri("https://space.bilibili.com/330170655") }
+                    }
+                )
             }
 
             Surface(
@@ -1035,6 +1064,54 @@ private fun TransportModeOptionItem(
                 )
             }
             SelectionIndicator(selected = selected)
+        }
+    }
+}
+
+@Composable
+private fun HeaderLinkChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    accentColor: Color,
+    dark: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = accentColor.copy(alpha = if (dark) 0.14f else 0.09f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = if (dark) 0.35f else 0.25f)),
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = accentColor,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = AppIcons.OpenExternal,
+                contentDescription = null,
+                tint = accentColor.copy(alpha = 0.8f),
+                modifier = Modifier.size(12.dp)
+            )
         }
     }
 }

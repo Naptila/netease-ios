@@ -109,6 +109,6 @@ app/src/main/
 
 ## 开源协议
 
-本项目基于 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 协议开源。
+本项目基于 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 协议开源，完全免费，禁止倒卖。
 
 你可以自由地使用、修改和分发本项目的源代码，但任何基于本项目的修改版本或衍生作品在分发时，**必须同样以 GPL-3.0 协议开源**，并保留原始版权声明与协议文本。完整协议内容请参阅仓库根目录下的 [LICENSE](LICENSE) 文件，或访问 [GNU GPL v3.0 官方页面](https://www.gnu.org/licenses/gpl-3.0.html)。

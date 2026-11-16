@@ -306,6 +306,71 @@ object AppIcons {
         }
     }
 
+    val GitHub: ImageVector by lazy {
+        strokeIcon("GitHub") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 2f)
+                arcTo(10f, 10f, 0f, false, false, 8.84f, 21.49f)
+                quadTo(9.34f, 21.58f, 9.34f, 20.88f)
+                lineTo(9.34f, 19.0f)
+                curveTo(6.6f, 19.6f, 6.0f, 17.7f, 6.0f, 17.7f)
+                curveTo(5.55f, 16.55f, 4.9f, 16.25f, 4.9f, 16.25f)
+                curveTo(4.0f, 15.65f, 4.97f, 15.66f, 4.97f, 15.66f)
+                curveTo(5.97f, 15.73f, 6.5f, 16.68f, 6.5f, 16.68f)
+                curveTo(7.4f, 18.2f, 8.85f, 17.76f, 9.42f, 17.5f)
+                curveTo(9.5f, 16.85f, 9.77f, 16.4f, 10.06f, 16.15f)
+                curveTo(7.84f, 15.9f, 5.5f, 15.04f, 5.5f, 11.2f)
+                curveTo(5.5f, 10.1f, 5.9f, 9.2f, 6.53f, 8.5f)
+                curveTo(6.43f, 8.25f, 6.08f, 7.22f, 6.63f, 5.85f)
+                curveTo(6.63f, 5.85f, 7.47f, 5.58f, 9.38f, 6.88f)
+                curveTo(10.2f, 6.66f, 11.1f, 6.55f, 12f, 6.55f)
+                curveTo(12.9f, 6.55f, 13.8f, 6.66f, 14.62f, 6.88f)
+                curveTo(16.53f, 5.58f, 17.37f, 5.85f, 17.37f, 5.85f)
+                curveTo(17.92f, 7.22f, 17.57f, 8.25f, 17.47f, 8.5f)
+                curveTo(18.1f, 9.2f, 18.5f, 10.1f, 18.5f, 11.2f)
+                curveTo(18.5f, 15.05f, 16.15f, 15.9f, 13.92f, 16.15f)
+                curveTo(14.28f, 16.46f, 14.6f, 17.08f, 14.6f, 18.02f)
+                lineTo(14.6f, 20.88f)
+                quadTo(14.6f, 21.58f, 15.16f, 21.49f)
+                arcTo(10f, 10f, 0f, false, false, 12f, 2f)
+                close()
+            }
+        }
+    }
+
+    val Bilibili: ImageVector by lazy {
+        strokeIcon("Bilibili") {
+            path(
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.95f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                // Antennae
+                moveTo(7.8f, 3.2f)
+                lineTo(10.6f, 6.2f)
+                moveTo(16.2f, 3.2f)
+                lineTo(13.4f, 6.2f)
+                // Rounded TV body
+                moveTo(6.5f, 6.2f)
+                lineTo(17.5f, 6.2f)
+                quadTo(20.5f, 6.2f, 20.5f, 9.2f)
+                lineTo(20.5f, 16.2f)
+                quadTo(20.5f, 19.2f, 17.5f, 19.2f)
+                lineTo(6.5f, 19.2f)
+                quadTo(3.5f, 19.2f, 3.5f, 16.2f)
+                lineTo(3.5f, 9.2f)
+                quadTo(3.5f, 6.2f, 6.5f, 6.2f)
+                close()
+                // Eyes
+                moveTo(9.2f, 10.8f)
+                lineTo(8.6f, 14.2f)
+                moveTo(14.8f, 10.8f)
+                lineTo(15.4f, 14.2f)
+            }
+        }
+    }
+
     private inline fun strokeIcon(
         name: String,
         block: ImageVector.Builder.() -> Unit
