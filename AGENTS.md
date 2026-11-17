@@ -30,7 +30,7 @@ Guidelines for AI coding agents working on `netease-ios`.
 
 1. **Zero Credential Exposure**
    - Never collect, transmit, log, or persist passwords, SMS OTPs, cookies, active MPay tokens, or account UIDs to disk.
-   - Keep `"token": ""` in `MpayBridgeSession.getOrWriteSeed()` and zero byte buffers (`bytes.fill(0)`, `request.body.fill(0)`) in `finally` blocks.
+   - Keep the dummy placeholder `"token": "0"` in `MpayBridgeSession.getOrWriteSeed()` (newer MPay SDKs reject empty `""` via `TextUtils.isEmpty` and drop `platform = 2`, whereas `"0"` satisfies non-empty checks without exposing any real credential) and zero byte buffers (`bytes.fill(0)`, `request.body.fill(0)`) in `finally` blocks.
    - Keep `netease_mpay_bridge.xml` excluded in `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml`. Do NOT set `FLAG_SECURE` on `MainActivity` (screen capture/recording must remain allowed, and the UI displays no credentials).
 
 2. **Loopback Server & Lifecycle Hardening**

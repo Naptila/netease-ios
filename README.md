@@ -50,7 +50,7 @@
 ## 工作原理简述
 
 1. **本地回环瞬时通信**：每次操作仅在本地回环地址 `127.0.0.1` 绑定随机端口并生成一次性 24 字节随机路径 Nonce，配合严格 `Host` / `Origin` 校验与 CSP 策略，45 秒超时或完成后立即销毁。
-2. **单次桥接完成识别与预置**：拉起目标游戏的 `GMWebviewActivity`，通过 JS 桥调用 `gameContextInfo` 获取当前登录账号标识（UID）与 `game_id` 代号，随即在内存中生成一段不含登录凭据（`token: ""`）、标记 `pc_ext_info.src_client_type = 2`（iOS）与 `need_mask = true` 的临时 MPay 会话种子，通过选定的 `widget_file_provider` 或 SAF `Android/media/<游戏包名>` 写入后立即调用 `loadMpaySession` 加载（临时文件在完成后、恢复前台及下次启动时自动清理），使后续在原版登录窗切换重登同一账号时携带 iOS 客户端标识。
+2. **单次桥接完成识别与预置**：拉起目标游戏的 `GMWebviewActivity`，通过 JS 桥调用 `gameContextInfo` 获取当前登录账号标识（UID）与 `game_id` 代号，随即在内存中生成一段不含真实登录凭据（仅用占位符 `token: "0"`）、标记 `pc_ext_info.src_client_type = 2`（iOS）与 `need_mask = true` 的临时 MPay 会话种子，通过选定的 `widget_file_provider` 或 SAF `Android/media/<游戏包名>` 写入后立即调用 `loadMpaySession` 加载（临时文件在完成后、恢复前台及下次启动时自动清理），使后续在原版登录窗切换重登同一账号时携带 iOS 客户端标识。
 
 ---
 
