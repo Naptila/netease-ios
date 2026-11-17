@@ -47,6 +47,15 @@ internal object SeedStorage {
             .apply()
     }
 
+    fun isNonEmptyTokenEnabled(context: Context, packageName: String): Boolean =
+        MpayBridgeSession.prefs(context).getBoolean("seed_non_empty_token_$packageName", false)
+
+    fun setNonEmptyTokenEnabled(context: Context, packageName: String, enabled: Boolean) {
+        MpayBridgeSession.prefs(context).edit()
+            .putBoolean("seed_non_empty_token_$packageName", enabled)
+            .apply()
+    }
+
     fun hasValidDirectoryGrant(context: Context, packageName: String): Boolean {
         if (!BridgeProtocol.isValidPackageName(packageName)) return false
         val saved = MpayBridgeSession.prefs(context).getString("media_tree_$packageName", null)

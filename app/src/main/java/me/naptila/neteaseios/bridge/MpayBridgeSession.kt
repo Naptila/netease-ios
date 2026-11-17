@@ -22,13 +22,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Single-session loopback MPay iOS login bridge for NetEase UniSDK/GMBridge5 games.
  * Reads the currently logged-in UID & game_id via gameContextInfo and immediately loads
- * a placeholder-token iOS session seed in one seamless pass.
+ * an iOS session seed (default empty token, or optional non-empty placeholder) in one pass.
  * Never receives passwords, OTPs or active login tokens.
  */
 class MpayBridgeSession(
     context: Context,
     private val target: GameTarget,
     private val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
+    private val nonEmptyToken: Boolean = false,
     private val listener: Listener
 ) : AutoCloseable {
 
@@ -269,7 +270,7 @@ class MpayBridgeSession(
         val fileName = "ntes_mpay_${UUID.randomUUID().toString().replace("-", "")}.tmp"
         val user = JSONObject()
             .put("id", uid)
-            .put("token", "0")
+            .put("token", if (nonEmptyToken) "0" else "")
             .put("need_mask", true)
             .put("login_type", BridgeProtocol.DEFAULT_LOGIN_TYPE)
             .put("login_channel", BridgeProtocol.DEFAULT_LOGIN_CHANNEL)

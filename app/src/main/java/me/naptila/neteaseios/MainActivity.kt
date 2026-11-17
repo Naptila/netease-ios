@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                     onSelectInstalledGame = ::selectInstalledGame,
                     onRefreshApps = ::loadInstalledAppsAsync,
                     onSelectTransportMode = ::selectTransportMode,
+                    onToggleNonEmptyToken = ::toggleNonEmptyToken,
                     onAuthorizeSafDirectory = ::authorizeCurrentGameDirectory,
                     onPrepareIosLogin = ::beginPrepare
                 )
@@ -180,6 +181,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun toggleNonEmptyToken(enabled: Boolean) {
+        if (uiState.busy) return
+        val pkg = uiState.currentGame?.spec?.packageName
+        if (pkg != null) {
+            SeedStorage.setNonEmptyTokenEnabled(this, pkg, enabled)
+        }
+        uiState = uiState.copy(nonEmptyToken = enabled)
+    }
+
     private fun authorizeCurrentGameDirectory() {
         if (uiState.busy) return
         val spec = uiState.currentGame?.spec ?: run {
@@ -247,6 +257,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val selectedMode = uiState.transportMode
+        val useNonEmptyToken = uiState.nonEmptyToken
         uiState = uiState.copy(
             busy = true,
             statusMessage = "正在连接「${spec.displayName}」准备 iOS 登录…",
@@ -260,6 +271,7 @@ class MainActivity : ComponentActivity() {
                     context = this,
                     target = target,
                     transportMode = selectedMode,
+                    nonEmptyToken = useNonEmptyToken,
                     listener = object : MpayBridgeSession.Listener {
                         override fun onSubmitted(gameId: String, confirmed: Boolean, usedSaf: Boolean) {
                             val text = if (confirmed) {
@@ -352,6 +364,7 @@ class MainActivity : ComponentActivity() {
         val submittedCurrent = state == "submitted" && currentOpMatches
         val unconfirmedCurrent = state == "unconfirmed" && currentOpMatches
         val mode = SeedStorage.getTransportMode(this, pkg)
+        val nonEmptyToken = SeedStorage.isNonEmptyTokenEnabled(this, pkg)
         val safAuthorized = SeedStorage.hasValidDirectoryGrant(this, pkg)
 
         var message = uiState.statusMessage
@@ -391,6 +404,7 @@ class MainActivity : ComponentActivity() {
             submittedCurrent = submittedCurrent,
             unconfirmedCurrent = unconfirmedCurrent,
             transportMode = mode,
+            nonEmptyToken = nonEmptyToken,
             safAuthorized = safAuthorized,
             statusMessage = message,
             statusTone = tone

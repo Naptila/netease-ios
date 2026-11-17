@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -106,6 +107,7 @@ data class BridgeUiState(
     val submittedCurrent: Boolean = false,
     val unconfirmedCurrent: Boolean = false,
     val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
+    val nonEmptyToken: Boolean = false,
     val safAuthorized: Boolean = false
 ) {
     val effectiveGameId: String? get() = currentGame?.spec?.gameId ?: detectedGameId
@@ -119,6 +121,7 @@ fun BridgeScreen(
     onSelectInstalledGame: (InstalledGame) -> Unit,
     onRefreshApps: () -> Unit,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
+    onToggleNonEmptyToken: (Boolean) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
 ) {
@@ -178,6 +181,7 @@ fun BridgeScreen(
                     state = state,
                     dark = dark,
                     onSelectTransportMode = onSelectTransportMode,
+                    onToggleNonEmptyToken = onToggleNonEmptyToken,
                     onAuthorizeSafDirectory = {
                         if (state.currentGame == null) showAppPicker = true else onAuthorizeSafDirectory()
                     },
@@ -808,6 +812,7 @@ private fun PrepareIosCard(
     state: BridgeUiState,
     dark: Boolean,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
+    onToggleNonEmptyToken: (Boolean) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
 ) {
@@ -909,6 +914,47 @@ private fun PrepareIosCard(
                                 )
                             }
                         }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (state.nonEmptyToken) scheme.primaryContainer.copy(alpha = 0.55f)
+                    else scheme.surfaceVariant.copy(alpha = 0.38f),
+                    border = BorderStroke(
+                        width = if (state.nonEmptyToken) 1.4.dp else 1.dp,
+                        color = if (state.nonEmptyToken) scheme.primary else scheme.outlineVariant
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(enabled = !state.busy) { onToggleNonEmptyToken(!state.nonEmptyToken) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                text = "非空占位凭证（新版阴阳师适用）",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = scheme.onSurface
+                            )
+                            Text(
+                                text = "默认关闭；仅在准备后重登仍是安卓号时开启",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = state.nonEmptyToken,
+                            onCheckedChange = null,
+                            enabled = !state.busy
+                        )
                     }
                 }
             }
@@ -1134,6 +1180,7 @@ private fun BridgeScreenPreview() {
             onSelectInstalledGame = {},
             onRefreshApps = {},
             onSelectTransportMode = {},
+            onToggleNonEmptyToken = {},
             onAuthorizeSafDirectory = {},
             onPrepareIosLogin = {}
         )
