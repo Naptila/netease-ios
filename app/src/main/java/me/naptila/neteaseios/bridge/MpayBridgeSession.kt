@@ -228,6 +228,7 @@ class MpayBridgeSession(
                             val reason = input.optString("reason")
                             val message = when (reason) {
                                 "not_logged_in" -> "未读取到已登录的网易账号，请先在「${target.appLabel}」正常登录该账号后再试。"
+                                "helper_frozen" -> "助手在后台被系统冻结（或开启了省电模式），请关闭省电模式或将本助手设为「无限制 / 允许后台运行」后重试。"
                                 "no_callback" -> "没有收到游戏接口响应，请返回游戏关闭当前页面后重试。"
                                 "bridge_missing" -> "游戏网页桥未就绪，请先打开「${target.appLabel}」登录进入主页后再试。"
                                 "sdk_read_failed" -> "SDK 未能读取准备文件，该游戏可能不支持当前写入方式。"
