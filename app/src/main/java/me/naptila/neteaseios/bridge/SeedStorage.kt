@@ -56,6 +56,15 @@ internal object SeedStorage {
             .apply()
     }
 
+    fun isRememberAccountEnabled(context: Context, packageName: String): Boolean =
+        MpayBridgeSession.prefs(context).getBoolean("seed_is_remember_$packageName", false)
+
+    fun setRememberAccountEnabled(context: Context, packageName: String, enabled: Boolean) {
+        MpayBridgeSession.prefs(context).edit()
+            .putBoolean("seed_is_remember_$packageName", enabled)
+            .apply()
+    }
+
     fun hasValidDirectoryGrant(context: Context, packageName: String): Boolean {
         if (!BridgeProtocol.isValidPackageName(packageName)) return false
         val saved = MpayBridgeSession.prefs(context).getString("media_tree_$packageName", null)

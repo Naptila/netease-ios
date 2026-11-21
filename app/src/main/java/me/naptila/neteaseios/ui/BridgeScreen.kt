@@ -108,6 +108,7 @@ data class BridgeUiState(
     val unconfirmedCurrent: Boolean = false,
     val transportMode: SeedTransportMode = SeedTransportMode.STANDARD,
     val nonEmptyToken: Boolean = false,
+    val rememberAccount: Boolean = false,
     val safAuthorized: Boolean = false
 ) {
     val effectiveGameId: String? get() = currentGame?.spec?.gameId ?: detectedGameId
@@ -122,6 +123,7 @@ fun BridgeScreen(
     onRefreshApps: () -> Unit,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
     onToggleNonEmptyToken: (Boolean) -> Unit,
+    onToggleRememberAccount: (Boolean) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
 ) {
@@ -182,6 +184,7 @@ fun BridgeScreen(
                     dark = dark,
                     onSelectTransportMode = onSelectTransportMode,
                     onToggleNonEmptyToken = onToggleNonEmptyToken,
+                    onToggleRememberAccount = onToggleRememberAccount,
                     onAuthorizeSafDirectory = {
                         if (state.currentGame == null) showAppPicker = true else onAuthorizeSafDirectory()
                     },
@@ -813,6 +816,7 @@ private fun PrepareIosCard(
     dark: Boolean,
     onSelectTransportMode: (SeedTransportMode) -> Unit,
     onToggleNonEmptyToken: (Boolean) -> Unit,
+    onToggleRememberAccount: (Boolean) -> Unit,
     onAuthorizeSafDirectory: () -> Unit,
     onPrepareIosLogin: () -> Unit
 ) {
@@ -917,46 +921,21 @@ private fun PrepareIosCard(
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (state.nonEmptyToken) scheme.primaryContainer.copy(alpha = 0.55f)
-                    else scheme.surfaceVariant.copy(alpha = 0.38f),
-                    border = BorderStroke(
-                        width = if (state.nonEmptyToken) 1.4.dp else 1.dp,
-                        color = if (state.nonEmptyToken) scheme.primary else scheme.outlineVariant
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(enabled = !state.busy) { onToggleNonEmptyToken(!state.nonEmptyToken) }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Text(
-                                text = "非空占位凭证（新版阴阳师适用）",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = scheme.onSurface
-                            )
-                            Text(
-                                text = "默认关闭；仅在准备后重登仍是安卓号时开启",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = scheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = state.nonEmptyToken,
-                            onCheckedChange = null,
-                            enabled = !state.busy
-                        )
-                    }
-                }
+                CompatibilityToggleItem(
+                    title = "非空占位凭证（新版阴阳师适用）",
+                    description = "默认关闭；仅在准备后重登仍是安卓号时开启",
+                    checked = state.nonEmptyToken,
+                    enabled = !state.busy,
+                    onCheckedChange = onToggleNonEmptyToken
+                )
+
+                CompatibilityToggleItem(
+                    title = "旧版组件记住标记（决战！平安京适用）",
+                    description = "默认关闭；其他游戏开启会导致「切换账号」列表隐藏记录需重登",
+                    checked = state.rememberAccount,
+                    enabled = !state.busy,
+                    onCheckedChange = onToggleRememberAccount
+                )
             }
 
             Button(
@@ -1063,6 +1042,57 @@ private fun SelectionIndicator(selected: Boolean) {
                 border = BorderStroke(1.5.dp, scheme.outline),
                 modifier = Modifier.fillMaxSize()
             ) {}
+        }
+    }
+}
+
+@Composable
+private fun CompatibilityToggleItem(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (checked) scheme.primaryContainer.copy(alpha = 0.55f)
+        else scheme.surfaceVariant.copy(alpha = 0.38f),
+        border = BorderStroke(
+            width = if (checked) 1.4.dp else 1.dp,
+            color = if (checked) scheme.primary else scheme.outlineVariant
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = scheme.onSurface
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled
+            )
         }
     }
 }
@@ -1181,6 +1211,7 @@ private fun BridgeScreenPreview() {
             onRefreshApps = {},
             onSelectTransportMode = {},
             onToggleNonEmptyToken = {},
+            onToggleRememberAccount = {},
             onAuthorizeSafDirectory = {},
             onPrepareIosLogin = {}
         )
